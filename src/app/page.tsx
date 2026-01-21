@@ -326,15 +326,22 @@ export default function Home() {
                       </div>
                     ))}
 
-                    {/* Wake marker */}
+                    {/* Wake marker - Sunrise gradient */}
                     <div
-                      className="absolute left-0 right-0 h-1 bg-amber-400 cursor-ns-resize rounded-full"
-                      style={{ top: `${minutesToPercent(schedule.wakeTime)}%` }}
+                      className="absolute left-0 right-0 h-8 cursor-ns-resize rounded-lg overflow-hidden"
+                      style={{
+                        top: `${minutesToPercent(schedule.wakeTime)}%`,
+                        transform: 'translateY(-50%)',
+                        background: 'linear-gradient(to bottom, #1e1b4b, #312e81, #4338ca, #f97316, #fbbf24, #fef3c7)'
+                      }}
                       onMouseDown={() => setDragging({ type: "wake" })}
                     >
+                      <div className="absolute inset-0 flex items-center justify-center">
+                        <span className="text-lg">🌅</span>
+                      </div>
                       <div className="absolute -right-2 top-1/2 -translate-y-1/2 translate-x-full pl-2 whitespace-nowrap">
                         <span className="text-xs font-medium text-amber-700">
-                          Wake {formatTime(schedule.wakeTime)}
+                          {formatTime(schedule.wakeTime)}
                         </span>
                       </div>
                     </div>
@@ -349,25 +356,24 @@ export default function Home() {
                       return (
                         <div
                           key={index}
-                          className="absolute left-0 right-0 bg-indigo-400 rounded-lg"
+                          className="absolute left-0 right-0 rounded-lg"
                           style={{
                             top: `${topPercent}%`,
                             height: `${heightPercent}%`,
+                            background: 'linear-gradient(to bottom, #1e1b4b, #312e81, #1e1b4b)',
                           }}
                         >
                           {/* Top drag handle */}
                           <div
-                            className="absolute top-0 left-0 right-0 h-3 cursor-ns-resize bg-indigo-500 rounded-t-lg hover:bg-indigo-600"
+                            className="absolute top-0 left-0 right-0 h-3 cursor-ns-resize bg-indigo-950 rounded-t-lg hover:bg-indigo-900"
                             onMouseDown={() => setDragging({ type: "napStart", index })}
                           />
 
-                          {/* Nap label */}
+                          {/* Nap label with moon */}
                           <div className="absolute inset-0 flex items-center justify-center">
                             <div className="text-center text-white">
-                              <div className="text-sm font-medium">
-                                Nap {index + 1}
-                              </div>
-                              <div className="text-xs opacity-80">
+                              <div className="text-2xl mb-1">🌙</div>
+                              <div className="text-xs opacity-70">
                                 {formatDuration(duration)}
                               </div>
                             </div>
@@ -375,30 +381,37 @@ export default function Home() {
 
                           {/* Time labels */}
                           <div className="absolute -right-2 top-0 translate-x-full pl-2">
-                            <span className="text-xs text-indigo-700">{formatTime(nap.startMinutes)}</span>
+                            <span className="text-xs text-indigo-300">{formatTime(nap.startMinutes)}</span>
                           </div>
                           <div className="absolute -right-2 bottom-0 translate-x-full pl-2">
-                            <span className="text-xs text-indigo-700">{formatTime(nap.endMinutes)}</span>
+                            <span className="text-xs text-indigo-300">{formatTime(nap.endMinutes)}</span>
                           </div>
 
                           {/* Bottom drag handle */}
                           <div
-                            className="absolute bottom-0 left-0 right-0 h-3 cursor-ns-resize bg-indigo-500 rounded-b-lg hover:bg-indigo-600"
+                            className="absolute bottom-0 left-0 right-0 h-3 cursor-ns-resize bg-indigo-950 rounded-b-lg hover:bg-indigo-900"
                             onMouseDown={() => setDragging({ type: "napEnd", index })}
                           />
                         </div>
                       );
                     })}
 
-                    {/* Bedtime marker */}
+                    {/* Bedtime marker - Sunset gradient */}
                     <div
-                      className="absolute left-0 right-0 h-1 bg-slate-600 cursor-ns-resize rounded-full"
-                      style={{ top: `${minutesToPercent(schedule.bedtime)}%` }}
+                      className="absolute left-0 right-0 h-8 cursor-ns-resize rounded-lg overflow-hidden"
+                      style={{
+                        top: `${minutesToPercent(schedule.bedtime)}%`,
+                        transform: 'translateY(-50%)',
+                        background: 'linear-gradient(to bottom, #fef3c7, #fbbf24, #f97316, #dc2626, #4338ca, #312e81, #1e1b4b)'
+                      }}
                       onMouseDown={() => setDragging({ type: "bedtime" })}
                     >
+                      <div className="absolute inset-0 flex items-center justify-center">
+                        <span className="text-lg">🌇</span>
+                      </div>
                       <div className="absolute -right-2 top-1/2 -translate-y-1/2 translate-x-full pl-2 whitespace-nowrap">
                         <span className="text-xs font-medium text-slate-700">
-                          Bed {formatTime(schedule.bedtime)}
+                          {formatTime(schedule.bedtime)}
                         </span>
                       </div>
                     </div>
