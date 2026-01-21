@@ -1,15 +1,17 @@
 "use client";
 
-import { useState, useEffect } from "react";
-import {
-  getAwakeWindowRange,
-  getSuggestedNaps,
-} from "@/lib/schedule";
+import { useState, useEffect, useRef, useCallback } from "react";
+import { getAwakeWindowRange, getSuggestedNaps } from "@/lib/schedule";
 
-interface ScheduleItem {
-  minutes: number; // minutes since midnight
-  label: string;
-  type: "wake" | "nap" | "bedtime";
+interface NapBlock {
+  startMinutes: number;
+  endMinutes: number;
+}
+
+interface Schedule {
+  wakeTime: number;
+  naps: NapBlock[];
+  bedtime: number;
 }
 
 function parseTime(time: string): number {
@@ -26,11 +28,18 @@ function formatTime(minutes: number): string {
   return `${displayHours}:${mins.toString().padStart(2, "0")} ${period}`;
 }
 
+function formatDuration(minutes: number): string {
+  if (minutes < 60) return `${minutes}m`;
+  const hrs = Math.floor(minutes / 60);
+  const mins = minutes % 60;
+  return mins > 0 ? `${hrs}h ${mins}m` : `${hrs}h`;
+}
+
 function getAwakeWindow(ageMonths: number): number {
-  if (ageMonths < 3) return 52; // avg of 45-60
-  if (ageMonths < 6) return 120; // avg of 90-150
-  if (ageMonths < 9) return 150; // avg of 120-180
-  return 210; // avg of 180-240
+  if (ageMonths < 3) return 52;
+  if (ageMonths < 6) return 120;
+  if (ageMonths < 9) return 150;
+  return 210;
 }
 
 function getNapDuration(ageMonths: number, napNumber: number, totalNaps: number): number {
@@ -41,32 +50,37 @@ function getNapDuration(ageMonths: number, napNumber: number, totalNaps: number)
   return isLastNap ? 30 : 90;
 }
 
-function generateInitialSchedule(ageMonths: number, numNaps: number, wakeTimeMinutes: number): ScheduleItem[] {
-  const schedule: ScheduleItem[] = [];
+function generateInitialSchedule(ageMonths: number, numNaps: number, wakeTimeMinutes: number): Schedule {
   const awakeWindow = getAwakeWindow(ageMonths);
+  const naps: NapBlock[] = [];
   let currentTime = wakeTimeMinutes;
-
-  schedule.push({ minutes: currentTime, label: "Wake up", type: "wake" });
 
   for (let i = 1; i <= numNaps; i++) {
     currentTime += awakeWindow;
-    const napLabel = numNaps === 1 ? "Nap" : `Nap ${i}`;
-    schedule.push({ minutes: currentTime, label: napLabel, type: "nap" });
-    currentTime += getNapDuration(ageMonths, i, numNaps);
+    const napStart = currentTime;
+    const napDuration = getNapDuration(ageMonths, i, numNaps);
+    currentTime += napDuration;
+    naps.push({ startMinutes: napStart, endMinutes: currentTime });
   }
 
   currentTime += awakeWindow;
-  schedule.push({ minutes: currentTime, label: "Bedtime", type: "bedtime" });
 
-  return schedule;
+  return {
+    wakeTime: wakeTimeMinutes,
+    naps,
+    bedtime: currentTime,
+  };
 }
 
 export default function Home() {
   const [ageMonths, setAgeMonths] = useState(4);
   const [numNaps, setNumNaps] = useState(3);
   const [wakeTime, setWakeTime] = useState("06:30");
-  const [schedule, setSchedule] = useState<ScheduleItem[]>([]);
+  const [schedule, setSchedule] = useState<Schedule | null>(null);
   const [showSchedule, setShowSchedule] = useState(false);
+
+  const timelineRef = useRef<HTMLDivElement>(null);
+  const [dragging, setDragging] = useState<{ type: string; index?: number } | null>(null);
 
   useEffect(() => {
     setNumNaps(getSuggestedNaps(ageMonths));
@@ -81,24 +95,120 @@ export default function Home() {
 
   const handleReset = () => {
     setShowSchedule(false);
+    setSchedule(null);
   };
 
-  const handleTimeChange = (index: number, newMinutes: number) => {
+  // Timeline range based on schedule
+  const timelineStart = schedule ? Math.min(schedule.wakeTime - 30, 300) : 300; // 30min before wake or 5am
+  const timelineEnd = schedule ? Math.max(schedule.bedtime + 30, 1380) : 1380; // 30min after bed or 11pm
+  const timelineRange = timelineEnd - timelineStart;
+
+  const minutesToPercent = useCallback((minutes: number) => {
+    return ((minutes - timelineStart) / timelineRange) * 100;
+  }, [timelineStart, timelineRange]);
+
+  const percentToMinutes = useCallback((percent: number) => {
+    return Math.round((percent / 100) * timelineRange + timelineStart);
+  }, [timelineStart, timelineRange]);
+
+  const handleMouseMove = useCallback((e: MouseEvent) => {
+    if (!dragging || !timelineRef.current || !schedule) return;
+
+    const rect = timelineRef.current.getBoundingClientRect();
+    const percent = Math.max(0, Math.min(100, ((e.clientY - rect.top) / rect.height) * 100));
+    const minutes = Math.round(percentToMinutes(percent) / 5) * 5; // snap to 5min
+
     setSchedule((prev) => {
-      const updated = [...prev];
-      const delta = newMinutes - updated[index].minutes;
+      if (!prev) return prev;
+      const updated = { ...prev, naps: [...prev.naps] };
 
-      // Shift this item and everything after it
-      return updated.map((item, i) => ({
-        ...item,
-        minutes: i >= index ? item.minutes + delta : item.minutes,
-      }));
+      if (dragging.type === "wake") {
+        const delta = minutes - updated.wakeTime;
+        updated.wakeTime = minutes;
+        // Shift all naps and bedtime
+        updated.naps = updated.naps.map((nap) => ({
+          startMinutes: nap.startMinutes + delta,
+          endMinutes: nap.endMinutes + delta,
+        }));
+        updated.bedtime += delta;
+      } else if (dragging.type === "napStart" && dragging.index !== undefined) {
+        const nap = updated.naps[dragging.index];
+        const minStart = dragging.index === 0
+          ? updated.wakeTime + 15
+          : updated.naps[dragging.index - 1].endMinutes + 15;
+        const maxStart = nap.endMinutes - 15;
+        updated.naps[dragging.index] = {
+          ...nap,
+          startMinutes: Math.max(minStart, Math.min(maxStart, minutes)),
+        };
+      } else if (dragging.type === "napEnd" && dragging.index !== undefined) {
+        const nap = updated.naps[dragging.index];
+        const minEnd = nap.startMinutes + 15;
+        const maxEnd = dragging.index < updated.naps.length - 1
+          ? updated.naps[dragging.index + 1].startMinutes - 15
+          : updated.bedtime - 15;
+        updated.naps[dragging.index] = {
+          ...nap,
+          endMinutes: Math.max(minEnd, Math.min(maxEnd, minutes)),
+        };
+      } else if (dragging.type === "bedtime") {
+        const lastNap = updated.naps[updated.naps.length - 1];
+        const minBedtime = lastNap ? lastNap.endMinutes + 15 : updated.wakeTime + 60;
+        updated.bedtime = Math.max(minBedtime, minutes);
+      }
+
+      return updated;
     });
-  };
+  }, [dragging, schedule, percentToMinutes]);
 
-  // Slider range: 5am to 10pm (300 to 1320 minutes)
-  const sliderMin = 300;
-  const sliderMax = 1320;
+  const handleMouseUp = useCallback(() => {
+    setDragging(null);
+  }, []);
+
+  useEffect(() => {
+    if (dragging) {
+      window.addEventListener("mousemove", handleMouseMove);
+      window.addEventListener("mouseup", handleMouseUp);
+      return () => {
+        window.removeEventListener("mousemove", handleMouseMove);
+        window.removeEventListener("mouseup", handleMouseUp);
+      };
+    }
+  }, [dragging, handleMouseMove, handleMouseUp]);
+
+  // Calculate awake windows
+  const getAwakeWindows = () => {
+    if (!schedule) return [];
+    const windows: { startMinutes: number; endMinutes: number; duration: number }[] = [];
+
+    // First awake window: wake to first nap
+    if (schedule.naps.length > 0) {
+      windows.push({
+        startMinutes: schedule.wakeTime,
+        endMinutes: schedule.naps[0].startMinutes,
+        duration: schedule.naps[0].startMinutes - schedule.wakeTime,
+      });
+
+      // Between naps
+      for (let i = 0; i < schedule.naps.length - 1; i++) {
+        windows.push({
+          startMinutes: schedule.naps[i].endMinutes,
+          endMinutes: schedule.naps[i + 1].startMinutes,
+          duration: schedule.naps[i + 1].startMinutes - schedule.naps[i].endMinutes,
+        });
+      }
+
+      // Last awake window: last nap to bedtime
+      const lastNap = schedule.naps[schedule.naps.length - 1];
+      windows.push({
+        startMinutes: lastNap.endMinutes,
+        endMinutes: schedule.bedtime,
+        duration: schedule.bedtime - lastNap.endMinutes,
+      });
+    }
+
+    return windows;
+  };
 
   return (
     <div className="min-h-screen bg-stone-50 py-12 px-4">
@@ -107,7 +217,7 @@ export default function Home() {
           Sleep Schedule
         </h1>
         <p className="text-stone-500 mb-8">
-          Get a recommended daily schedule for your baby
+          Build your baby&apos;s daily schedule
         </p>
 
         {!showSchedule ? (
@@ -168,60 +278,133 @@ export default function Home() {
               Generate Schedule
             </button>
           </form>
-        ) : (
+        ) : schedule ? (
           <div className="space-y-6">
+            {/* Vertical Timeline */}
             <div className="bg-white rounded-xl border border-stone-200 overflow-hidden">
               <div className="px-4 py-3 bg-stone-100 border-b border-stone-200">
                 <h2 className="font-medium text-stone-700">Your Schedule</h2>
-                <p className="text-sm text-stone-400">
-                  Drag sliders to adjust times
-                </p>
+                <p className="text-sm text-stone-400">Drag edges to adjust times</p>
               </div>
-              <div className="divide-y divide-stone-100">
-                {schedule.map((event, index) => (
-                  <div key={index} className="px-4 py-4">
-                    <div className="flex items-center justify-between mb-2">
-                      <div className="flex items-center gap-3">
-                        <div
-                          className={`w-2 h-2 rounded-full ${
-                            event.type === "wake"
-                              ? "bg-amber-400"
-                              : event.type === "nap"
-                              ? "bg-indigo-400"
-                              : "bg-slate-600"
-                          }`}
-                        />
-                        <span className="text-stone-700">{event.label}</span>
-                      </div>
-                      <span className="text-stone-800 font-mono font-medium">
-                        {formatTime(event.minutes)}
-                      </span>
-                    </div>
-                    <input
-                      type="range"
-                      min={sliderMin}
-                      max={sliderMax}
-                      step={5}
-                      value={Math.max(sliderMin, Math.min(sliderMax, event.minutes))}
-                      onChange={(e) => handleTimeChange(index, Number(e.target.value))}
-                      className={`w-full h-2 rounded-lg appearance-none cursor-pointer ${
-                        event.type === "wake"
-                          ? "bg-amber-100 accent-amber-500"
-                          : event.type === "nap"
-                          ? "bg-indigo-100 accent-indigo-500"
-                          : "bg-slate-200 accent-slate-600"
-                      }`}
-                    />
-                  </div>
-                ))}
-              </div>
-            </div>
 
-            <div className="bg-amber-50 border border-amber-200 rounded-lg p-4">
-              <p className="text-sm text-amber-800">
-                Sliding any time shifts everything after it. Move wake time to shift
-                the whole day.
-              </p>
+              <div className="p-4">
+                <div
+                  ref={timelineRef}
+                  className="relative h-[500px] bg-amber-50 rounded-lg border border-stone-200"
+                  style={{ cursor: dragging ? "ns-resize" : "default" }}
+                >
+                  {/* Time markers on left */}
+                  {[6, 8, 10, 12, 14, 16, 18, 20, 22].map((hour) => {
+                    const minutes = hour * 60;
+                    if (minutes < timelineStart || minutes > timelineEnd) return null;
+                    return (
+                      <div
+                        key={hour}
+                        className="absolute left-0 w-8 text-xs text-stone-400 -translate-y-1/2"
+                        style={{ top: `${minutesToPercent(minutes)}%` }}
+                      >
+                        {hour > 12 ? hour - 12 : hour}{hour >= 12 ? "p" : "a"}
+                      </div>
+                    );
+                  })}
+
+                  {/* Timeline track */}
+                  <div className="absolute left-10 right-4 top-0 bottom-0">
+                    {/* Awake windows (background shows through) */}
+                    {getAwakeWindows().map((window, i) => (
+                      <div
+                        key={`awake-${i}`}
+                        className="absolute left-0 right-0 flex items-center justify-center"
+                        style={{
+                          top: `${minutesToPercent(window.startMinutes)}%`,
+                          height: `${minutesToPercent(window.endMinutes) - minutesToPercent(window.startMinutes)}%`,
+                        }}
+                      >
+                        <span className="text-xs text-amber-600 bg-amber-50 px-1 rounded">
+                          {formatDuration(window.duration)} awake
+                        </span>
+                      </div>
+                    ))}
+
+                    {/* Wake marker */}
+                    <div
+                      className="absolute left-0 right-0 h-1 bg-amber-400 cursor-ns-resize rounded-full"
+                      style={{ top: `${minutesToPercent(schedule.wakeTime)}%` }}
+                      onMouseDown={() => setDragging({ type: "wake" })}
+                    >
+                      <div className="absolute -right-2 top-1/2 -translate-y-1/2 translate-x-full pl-2 whitespace-nowrap">
+                        <span className="text-xs font-medium text-amber-700">
+                          Wake {formatTime(schedule.wakeTime)}
+                        </span>
+                      </div>
+                    </div>
+
+                    {/* Nap blocks */}
+                    {schedule.naps.map((nap, index) => {
+                      const topPercent = minutesToPercent(nap.startMinutes);
+                      const bottomPercent = minutesToPercent(nap.endMinutes);
+                      const heightPercent = bottomPercent - topPercent;
+                      const duration = nap.endMinutes - nap.startMinutes;
+
+                      return (
+                        <div
+                          key={index}
+                          className="absolute left-0 right-0 bg-indigo-400 rounded-lg"
+                          style={{
+                            top: `${topPercent}%`,
+                            height: `${heightPercent}%`,
+                          }}
+                        >
+                          {/* Top drag handle */}
+                          <div
+                            className="absolute top-0 left-0 right-0 h-3 cursor-ns-resize bg-indigo-500 rounded-t-lg hover:bg-indigo-600"
+                            onMouseDown={() => setDragging({ type: "napStart", index })}
+                          />
+
+                          {/* Nap label */}
+                          <div className="absolute inset-0 flex items-center justify-center">
+                            <div className="text-center text-white">
+                              <div className="text-sm font-medium">
+                                Nap {index + 1}
+                              </div>
+                              <div className="text-xs opacity-80">
+                                {formatDuration(duration)}
+                              </div>
+                            </div>
+                          </div>
+
+                          {/* Time labels */}
+                          <div className="absolute -right-2 top-0 translate-x-full pl-2">
+                            <span className="text-xs text-indigo-700">{formatTime(nap.startMinutes)}</span>
+                          </div>
+                          <div className="absolute -right-2 bottom-0 translate-x-full pl-2">
+                            <span className="text-xs text-indigo-700">{formatTime(nap.endMinutes)}</span>
+                          </div>
+
+                          {/* Bottom drag handle */}
+                          <div
+                            className="absolute bottom-0 left-0 right-0 h-3 cursor-ns-resize bg-indigo-500 rounded-b-lg hover:bg-indigo-600"
+                            onMouseDown={() => setDragging({ type: "napEnd", index })}
+                          />
+                        </div>
+                      );
+                    })}
+
+                    {/* Bedtime marker */}
+                    <div
+                      className="absolute left-0 right-0 h-1 bg-slate-600 cursor-ns-resize rounded-full"
+                      style={{ top: `${minutesToPercent(schedule.bedtime)}%` }}
+                      onMouseDown={() => setDragging({ type: "bedtime" })}
+                    >
+                      <div className="absolute -right-2 top-1/2 -translate-y-1/2 translate-x-full pl-2 whitespace-nowrap">
+                        <span className="text-xs font-medium text-slate-700">
+                          Bed {formatTime(schedule.bedtime)}
+                        </span>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
             </div>
 
             <button
@@ -231,7 +414,7 @@ export default function Home() {
               Start Over
             </button>
           </div>
-        )}
+        ) : null}
       </main>
     </div>
   );
