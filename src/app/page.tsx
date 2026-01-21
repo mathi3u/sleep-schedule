@@ -88,17 +88,11 @@ export default function Home() {
       const updated = [...prev];
       const delta = newMinutes - updated[index].minutes;
 
-      if (index === 0) {
-        // Wake time changed - shift everything
-        return updated.map((item) => ({
-          ...item,
-          minutes: item.minutes + delta,
-        }));
-      } else {
-        // Individual time changed
-        updated[index] = { ...updated[index], minutes: newMinutes };
-        return updated;
-      }
+      // Shift this item and everything after it
+      return updated.map((item, i) => ({
+        ...item,
+        minutes: i >= index ? item.minutes + delta : item.minutes,
+      }));
     });
   };
 
@@ -198,9 +192,6 @@ export default function Home() {
                           }`}
                         />
                         <span className="text-stone-700">{event.label}</span>
-                        {index === 0 && (
-                          <span className="text-xs text-stone-400">(shifts all)</span>
-                        )}
                       </div>
                       <span className="text-stone-800 font-mono font-medium">
                         {formatTime(event.minutes)}
@@ -228,8 +219,8 @@ export default function Home() {
 
             <div className="bg-amber-50 border border-amber-200 rounded-lg p-4">
               <p className="text-sm text-amber-800">
-                Adjusting wake time shifts the entire schedule. Individual nap times
-                can be fine-tuned separately.
+                Sliding any time shifts everything after it. Move wake time to shift
+                the whole day.
               </p>
             </div>
 
