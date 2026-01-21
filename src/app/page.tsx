@@ -2,27 +2,79 @@
 
 import { useState, useEffect } from "react";
 import {
-  generateSchedule,
   getAwakeWindowRange,
   getSuggestedNaps,
-  ScheduleEvent,
 } from "@/lib/schedule";
+
+interface ScheduleItem {
+  minutes: number; // minutes since midnight
+  label: string;
+  type: "wake" | "nap" | "bedtime";
+}
+
+function parseTime(time: string): number {
+  const [hours, mins] = time.split(":").map(Number);
+  return hours * 60 + mins;
+}
+
+function formatTime(minutes: number): string {
+  const normalizedMinutes = ((minutes % 1440) + 1440) % 1440;
+  const hours = Math.floor(normalizedMinutes / 60);
+  const mins = normalizedMinutes % 60;
+  const period = hours >= 12 ? "PM" : "AM";
+  const displayHours = hours === 0 ? 12 : hours > 12 ? hours - 12 : hours;
+  return `${displayHours}:${mins.toString().padStart(2, "0")} ${period}`;
+}
+
+function getAwakeWindow(ageMonths: number): number {
+  if (ageMonths < 3) return 52; // avg of 45-60
+  if (ageMonths < 6) return 120; // avg of 90-150
+  if (ageMonths < 9) return 150; // avg of 120-180
+  return 210; // avg of 180-240
+}
+
+function getNapDuration(ageMonths: number, napNumber: number, totalNaps: number): number {
+  const isLastNap = napNumber === totalNaps;
+  if (ageMonths < 3) return isLastNap ? 30 : 45;
+  if (ageMonths < 6) return isLastNap ? 30 : 60;
+  if (ageMonths < 9) return isLastNap ? 30 : 75;
+  return isLastNap ? 30 : 90;
+}
+
+function generateInitialSchedule(ageMonths: number, numNaps: number, wakeTimeMinutes: number): ScheduleItem[] {
+  const schedule: ScheduleItem[] = [];
+  const awakeWindow = getAwakeWindow(ageMonths);
+  let currentTime = wakeTimeMinutes;
+
+  schedule.push({ minutes: currentTime, label: "Wake up", type: "wake" });
+
+  for (let i = 1; i <= numNaps; i++) {
+    currentTime += awakeWindow;
+    const napLabel = numNaps === 1 ? "Nap" : `Nap ${i}`;
+    schedule.push({ minutes: currentTime, label: napLabel, type: "nap" });
+    currentTime += getNapDuration(ageMonths, i, numNaps);
+  }
+
+  currentTime += awakeWindow;
+  schedule.push({ minutes: currentTime, label: "Bedtime", type: "bedtime" });
+
+  return schedule;
+}
 
 export default function Home() {
   const [ageMonths, setAgeMonths] = useState(4);
   const [numNaps, setNumNaps] = useState(3);
   const [wakeTime, setWakeTime] = useState("06:30");
-  const [schedule, setSchedule] = useState<ScheduleEvent[]>([]);
+  const [schedule, setSchedule] = useState<ScheduleItem[]>([]);
   const [showSchedule, setShowSchedule] = useState(false);
 
-  // Update suggested naps when age changes
   useEffect(() => {
     setNumNaps(getSuggestedNaps(ageMonths));
   }, [ageMonths]);
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    const result = generateSchedule({ ageMonths, numNaps, wakeTime });
+    const result = generateInitialSchedule(ageMonths, numNaps, parseTime(wakeTime));
     setSchedule(result);
     setShowSchedule(true);
   };
@@ -30,6 +82,29 @@ export default function Home() {
   const handleReset = () => {
     setShowSchedule(false);
   };
+
+  const handleTimeChange = (index: number, newMinutes: number) => {
+    setSchedule((prev) => {
+      const updated = [...prev];
+      const delta = newMinutes - updated[index].minutes;
+
+      if (index === 0) {
+        // Wake time changed - shift everything
+        return updated.map((item) => ({
+          ...item,
+          minutes: item.minutes + delta,
+        }));
+      } else {
+        // Individual time changed
+        updated[index] = { ...updated[index], minutes: newMinutes };
+        return updated;
+      }
+    });
+  };
+
+  // Slider range: 5am to 10pm (300 to 1320 minutes)
+  const sliderMin = 300;
+  const sliderMax = 1320;
 
   return (
     <div className="min-h-screen bg-stone-50 py-12 px-4">
@@ -43,12 +118,8 @@ export default function Home() {
 
         {!showSchedule ? (
           <form onSubmit={handleSubmit} className="space-y-6">
-            {/* Age Input */}
             <div>
-              <label
-                htmlFor="age"
-                className="block text-sm font-medium text-stone-700 mb-2"
-              >
+              <label htmlFor="age" className="block text-sm font-medium text-stone-700 mb-2">
                 Baby&apos;s age (months)
               </label>
               <input
@@ -65,12 +136,8 @@ export default function Home() {
               </p>
             </div>
 
-            {/* Number of Naps */}
             <div>
-              <label
-                htmlFor="naps"
-                className="block text-sm font-medium text-stone-700 mb-2"
-              >
+              <label htmlFor="naps" className="block text-sm font-medium text-stone-700 mb-2">
                 Number of naps
               </label>
               <select
@@ -87,12 +154,8 @@ export default function Home() {
               </select>
             </div>
 
-            {/* Wake Time */}
             <div>
-              <label
-                htmlFor="wakeTime"
-                className="block text-sm font-medium text-stone-700 mb-2"
-              >
+              <label htmlFor="wakeTime" className="block text-sm font-medium text-stone-700 mb-2">
                 Typical wake up time
               </label>
               <input
@@ -113,48 +176,60 @@ export default function Home() {
           </form>
         ) : (
           <div className="space-y-6">
-            {/* Schedule Display */}
             <div className="bg-white rounded-xl border border-stone-200 overflow-hidden">
               <div className="px-4 py-3 bg-stone-100 border-b border-stone-200">
-                <h2 className="font-medium text-stone-700">
-                  Recommended Schedule
-                </h2>
+                <h2 className="font-medium text-stone-700">Your Schedule</h2>
                 <p className="text-sm text-stone-400">
-                  {ageMonths} month old, {numNaps} nap{numNaps > 1 ? "s" : ""}
+                  Drag sliders to adjust times
                 </p>
               </div>
               <div className="divide-y divide-stone-100">
                 {schedule.map((event, index) => (
-                  <div
-                    key={index}
-                    className="px-4 py-3 flex items-center justify-between"
-                  >
-                    <div className="flex items-center gap-3">
-                      <div
-                        className={`w-2 h-2 rounded-full ${
-                          event.type === "wake"
-                            ? "bg-amber-400"
-                            : event.type === "nap"
-                            ? "bg-indigo-400"
-                            : "bg-slate-600"
-                        }`}
-                      />
-                      <span className="text-stone-700">{event.label}</span>
+                  <div key={index} className="px-4 py-4">
+                    <div className="flex items-center justify-between mb-2">
+                      <div className="flex items-center gap-3">
+                        <div
+                          className={`w-2 h-2 rounded-full ${
+                            event.type === "wake"
+                              ? "bg-amber-400"
+                              : event.type === "nap"
+                              ? "bg-indigo-400"
+                              : "bg-slate-600"
+                          }`}
+                        />
+                        <span className="text-stone-700">{event.label}</span>
+                        {index === 0 && (
+                          <span className="text-xs text-stone-400">(shifts all)</span>
+                        )}
+                      </div>
+                      <span className="text-stone-800 font-mono font-medium">
+                        {formatTime(event.minutes)}
+                      </span>
                     </div>
-                    <span className="text-stone-500 font-mono text-sm">
-                      {event.time}
-                    </span>
+                    <input
+                      type="range"
+                      min={sliderMin}
+                      max={sliderMax}
+                      step={5}
+                      value={Math.max(sliderMin, Math.min(sliderMax, event.minutes))}
+                      onChange={(e) => handleTimeChange(index, Number(e.target.value))}
+                      className={`w-full h-2 rounded-lg appearance-none cursor-pointer ${
+                        event.type === "wake"
+                          ? "bg-amber-100 accent-amber-500"
+                          : event.type === "nap"
+                          ? "bg-indigo-100 accent-indigo-500"
+                          : "bg-slate-200 accent-slate-600"
+                      }`}
+                    />
                   </div>
                 ))}
               </div>
             </div>
 
-            {/* Info Box */}
             <div className="bg-amber-50 border border-amber-200 rounded-lg p-4">
               <p className="text-sm text-amber-800">
-                This schedule uses an average awake window of{" "}
-                {getAwakeWindowRange(ageMonths)}. Watch for your baby&apos;s
-                sleep cues to fine-tune these times.
+                Adjusting wake time shifts the entire schedule. Individual nap times
+                can be fine-tuned separately.
               </p>
             </div>
 
