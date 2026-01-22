@@ -13,10 +13,12 @@ interface Schedule {
   naps: NapBlock[];
 }
 
-function formatTime24(minutes: number): string {
+function formatTime(minutes: number): string {
   const hours = Math.floor(((minutes % 1440) + 1440) % 1440 / 60);
   const mins = ((minutes % 60) + 60) % 60;
-  return `${hours.toString().padStart(2, "0")}:${mins.toString().padStart(2, "0")}`;
+  const period = hours >= 12 ? "PM" : "AM";
+  const displayHours = hours === 0 ? 12 : hours > 12 ? hours - 12 : hours;
+  return `${displayHours}:${mins.toString().padStart(2, "0")} ${period}`;
 }
 
 function formatDuration(minutes: number): string {
@@ -25,32 +27,6 @@ function formatDuration(minutes: number): string {
   if (hrs === 0) return `${mins}m`;
   if (mins === 0) return `${hrs}h`;
   return `${hrs}h ${mins}m`;
-}
-
-function minutesToAngle(minutes: number): number {
-  return ((minutes / (24 * 60)) * 360) % 360;
-}
-
-function angleToMinutes(angle: number): number {
-  const normalized = ((angle % 360) + 360) % 360;
-  return Math.round((normalized / 360) * 24 * 60);
-}
-
-function describeArc(cx: number, cy: number, radius: number, startAngle: number, endAngle: number): string {
-  const start = polarToCartesian(cx, cy, radius, startAngle);
-  const end = polarToCartesian(cx, cy, radius, endAngle);
-  let arcSweep = endAngle - startAngle;
-  if (arcSweep < 0) arcSweep += 360;
-  const largeArcFlag = arcSweep > 180 ? 1 : 0;
-  return `M ${start.x} ${start.y} A ${radius} ${radius} 0 ${largeArcFlag} 1 ${end.x} ${end.y}`;
-}
-
-function polarToCartesian(cx: number, cy: number, radius: number, angleInDegrees: number) {
-  const angleInRadians = ((angleInDegrees - 90) * Math.PI) / 180;
-  return {
-    x: cx + radius * Math.cos(angleInRadians),
-    y: cy + radius * Math.sin(angleInRadians),
-  };
 }
 
 function getAwakeWindow(ageMonths: number): number {
@@ -92,7 +68,7 @@ function generateSchedule(ageMonths: number, numNaps: number, wakeTime: number):
 
   return {
     wakeTime,
-    bedtime: Math.min(currentTime, 22 * 60), // Cap at 10pm
+    bedtime: Math.min(currentTime, 22 * 60),
     naps,
   };
 }
@@ -104,44 +80,32 @@ export default function Home() {
     generateSchedule(6, 3, 6 * 60 + 30)
   );
 
-  const svgRef = useRef<SVGSVGElement>(null);
+  const timelineRef = useRef<HTMLDivElement>(null);
   const [dragging, setDragging] = useState<{ type: string; index?: number } | null>(null);
 
-  const cx = 160;
-  const cy = 160;
-  const radius = 130;
-  const arcWidth = 20;
-  const handleRadius = 10;
-
-  // Regenerate schedule when age/naps change
   useEffect(() => {
     setSchedule(generateSchedule(ageMonths, numNaps, schedule.wakeTime));
   }, [ageMonths, numNaps]);
 
-  const getNightSleep = () => {
-    let duration = schedule.wakeTime - schedule.bedtime;
-    if (duration < 0) duration += 24 * 60;
-    return duration;
+  // Timeline: 5am to 10pm
+  const timelineStart = 5 * 60;
+  const timelineEnd = 22 * 60;
+  const timelineRange = timelineEnd - timelineStart;
+
+  const minutesToPercent = (minutes: number) => {
+    return ((minutes - timelineStart) / timelineRange) * 100;
   };
 
-  const getTotalDaytimeSleep = () => {
-    return schedule.naps.reduce((sum, nap) => sum + (nap.endMinutes - nap.startMinutes), 0);
+  const percentToMinutes = (percent: number) => {
+    return Math.round((percent / 100) * timelineRange + timelineStart);
   };
-
-  const nightSleep = getNightSleep();
-  const daytimeSleep = getTotalDaytimeSleep();
 
   const handleMouseMove = useCallback((e: MouseEvent) => {
-    if (!dragging || !svgRef.current) return;
+    if (!dragging || !timelineRef.current) return;
 
-    const rect = svgRef.current.getBoundingClientRect();
-    const x = e.clientX - rect.left - cx;
-    const y = e.clientY - rect.top - cy;
-
-    let angle = (Math.atan2(y, x) * 180) / Math.PI + 90;
-    if (angle < 0) angle += 360;
-
-    const minutes = Math.round(angleToMinutes(angle) / 5) * 5;
+    const rect = timelineRef.current.getBoundingClientRect();
+    const percent = Math.max(0, Math.min(100, ((e.clientY - rect.top) / rect.height) * 100));
+    const minutes = Math.round(percentToMinutes(percent) / 5) * 5;
 
     setSchedule((prev) => {
       const updated = { ...prev, naps: [...prev.naps] };
@@ -149,7 +113,6 @@ export default function Home() {
       if (dragging.type === "wake") {
         const delta = minutes - updated.wakeTime;
         updated.wakeTime = minutes;
-        // Shift all naps
         updated.naps = updated.naps.map((nap) => ({
           startMinutes: nap.startMinutes + delta,
           endMinutes: nap.endMinutes + delta,
@@ -200,19 +163,46 @@ export default function Home() {
     }
   }, [dragging, handleMouseMove, handleMouseUp]);
 
-  const bedtimeIdeal = schedule.bedtime >= 19 * 60 && schedule.bedtime <= 20 * 60;
-  const wakeIdeal = schedule.wakeTime >= 6 * 60 && schedule.wakeTime <= 7 * 60;
-  const sleepIdeal = nightSleep >= 10 * 60 && nightSleep <= 12 * 60;
+  const getNightSleep = () => {
+    let duration = schedule.wakeTime - schedule.bedtime;
+    if (duration < 0) duration += 24 * 60;
+    return duration;
+  };
+
+  const getTotalDaytimeSleep = () => {
+    return schedule.naps.reduce((sum, nap) => sum + (nap.endMinutes - nap.startMinutes), 0);
+  };
+
+  const getAwakeWindows = () => {
+    const windows: { start: number; end: number }[] = [];
+
+    if (schedule.naps.length > 0) {
+      windows.push({ start: schedule.wakeTime, end: schedule.naps[0].startMinutes });
+
+      for (let i = 0; i < schedule.naps.length - 1; i++) {
+        windows.push({ start: schedule.naps[i].endMinutes, end: schedule.naps[i + 1].startMinutes });
+      }
+
+      windows.push({ start: schedule.naps[schedule.naps.length - 1].endMinutes, end: schedule.bedtime });
+    }
+
+    return windows;
+  };
+
+  const nightSleep = getNightSleep();
+  const daytimeSleep = getTotalDaytimeSleep();
+  const awakeWindows = getAwakeWindows();
 
   return (
-    <div className="min-h-screen bg-[#1c1c1e] py-6 px-4">
-      <main className="max-w-sm mx-auto">
-        <h1 className="text-xl font-semibold text-white text-center mb-4">Sleep Schedule</h1>
+    <div className="min-h-screen bg-slate-50">
+      {/* Header */}
+      <header className="bg-white border-b border-slate-200 px-4 py-4">
+        <h1 className="text-lg font-semibold text-slate-800 text-center">Sleep Schedule</h1>
 
-        {/* Age & Naps selector */}
-        <div className="flex gap-3 mb-4">
-          <div className="flex-1 bg-[#2c2c2e] rounded-xl p-3">
-            <label className="text-gray-400 text-xs block mb-1">Age (months)</label>
+        {/* Controls */}
+        <div className="flex gap-4 mt-3 max-w-md mx-auto">
+          <div className="flex-1">
+            <label className="text-xs text-slate-500 block mb-1">Age (months)</label>
             <select
               value={ageMonths}
               onChange={(e) => {
@@ -220,182 +210,154 @@ export default function Home() {
                 setAgeMonths(age);
                 setNumNaps(getSuggestedNaps(age));
               }}
-              className="w-full bg-transparent text-white text-lg font-light focus:outline-none"
+              className="w-full px-3 py-2 bg-slate-100 rounded-lg text-slate-800 text-sm focus:outline-none focus:ring-2 focus:ring-slate-300"
             >
               {Array.from({ length: 24 }, (_, i) => (
-                <option key={i} value={i + 1} className="bg-[#2c2c2e]">
-                  {i + 1}
-                </option>
+                <option key={i} value={i + 1}>{i + 1}</option>
               ))}
             </select>
           </div>
-          <div className="flex-1 bg-[#2c2c2e] rounded-xl p-3">
-            <label className="text-gray-400 text-xs block mb-1">Naps</label>
+          <div className="flex-1">
+            <label className="text-xs text-slate-500 block mb-1">Naps</label>
             <select
               value={numNaps}
               onChange={(e) => setNumNaps(Number(e.target.value))}
-              className="w-full bg-transparent text-white text-lg font-light focus:outline-none"
+              className="w-full px-3 py-2 bg-slate-100 rounded-lg text-slate-800 text-sm focus:outline-none focus:ring-2 focus:ring-slate-300"
             >
               {[1, 2, 3, 4, 5].map((n) => (
-                <option key={n} value={n} className="bg-[#2c2c2e]">
-                  {n}
-                </option>
+                <option key={n} value={n}>{n}</option>
               ))}
             </select>
           </div>
         </div>
+      </header>
 
-        {/* Time Display */}
-        <div className="flex justify-between px-4 mb-2">
-          <div className="text-center">
-            <div className="text-gray-400 text-xs mb-1">🛏️ BEDTIME</div>
-            <div className="text-white text-xl font-light">{formatTime24(schedule.bedtime)}</div>
-          </div>
-          <div className="text-center">
-            <div className="text-gray-400 text-xs mb-1">⏰ WAKE UP</div>
-            <div className="text-white text-xl font-light">{formatTime24(schedule.wakeTime)}</div>
-          </div>
+      {/* Timeline */}
+      <div
+        ref={timelineRef}
+        className="relative"
+        style={{
+          height: 'calc(100vh - 180px)',
+          cursor: dragging ? 'ns-resize' : 'default'
+        }}
+      >
+        {/* Time markers */}
+        <div className="absolute left-0 top-0 bottom-0 w-12 bg-white border-r border-slate-200 z-10">
+          {[5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22].map((hour) => {
+            const percent = minutesToPercent(hour * 60);
+            return (
+              <div
+                key={hour}
+                className="absolute left-0 right-0 text-xs text-slate-400 text-right pr-2"
+                style={{ top: `${percent}%`, transform: 'translateY(-50%)' }}
+              >
+                {hour > 12 ? hour - 12 : hour}{hour >= 12 ? 'p' : 'a'}
+              </div>
+            );
+          })}
         </div>
 
-        {/* Circular Clock */}
-        <div className="flex justify-center mb-2">
-          <svg
-            ref={svgRef}
-            width="320"
-            height="320"
-            className="select-none"
-            style={{ touchAction: "none" }}
+        {/* Main timeline area */}
+        <div className="absolute left-12 right-0 top-0 bottom-0">
+          {/* Awake windows (cream/beige) */}
+          {awakeWindows.map((window, i) => (
+            <div
+              key={`awake-${i}`}
+              className="absolute left-0 right-0 bg-amber-50 flex items-center justify-center"
+              style={{
+                top: `${minutesToPercent(window.start)}%`,
+                height: `${minutesToPercent(window.end) - minutesToPercent(window.start)}%`,
+              }}
+            >
+              <span className="text-amber-600 text-sm font-medium">
+                {formatDuration(window.end - window.start)} awake
+              </span>
+            </div>
+          ))}
+
+          {/* Wake marker */}
+          <div
+            className="absolute left-0 right-0 h-12 bg-yellow-100 border-y-2 border-yellow-300 flex items-center justify-between px-4 cursor-ns-resize z-20"
+            style={{ top: `${minutesToPercent(schedule.wakeTime)}%`, transform: 'translateY(-50%)' }}
+            onMouseDown={() => setDragging({ type: "wake" })}
           >
-            {/* Background circle */}
-            <circle cx={cx} cy={cy} r={radius + 12} fill="#2c2c2e" stroke="#3a3a3c" strokeWidth="1" />
+            <span className="text-yellow-700 font-medium">☀️ Wake up</span>
+            <span className="text-yellow-700 font-semibold">{formatTime(schedule.wakeTime)}</span>
+          </div>
 
-            {/* Hour markers */}
-            {Array.from({ length: 24 }, (_, i) => {
-              const angle = (i / 24) * 360;
-              const innerR = radius + 2;
-              const outerR = i % 2 === 0 ? radius + 10 : radius + 6;
-              const start = polarToCartesian(cx, cy, innerR, angle);
-              const end = polarToCartesian(cx, cy, outerR, angle);
-              return (
-                <line key={i} x1={start.x} y1={start.y} x2={end.x} y2={end.y}
-                  stroke="#5a5a5c" strokeWidth={i % 2 === 0 ? 2 : 1} />
-              );
-            })}
+          {/* Nap blocks */}
+          {schedule.naps.map((nap, index) => {
+            const topPercent = minutesToPercent(nap.startMinutes);
+            const heightPercent = minutesToPercent(nap.endMinutes) - topPercent;
+            const duration = nap.endMinutes - nap.startMinutes;
 
-            {/* Hour labels */}
-            {[0, 4, 8, 12, 16, 20].map((hour) => {
-              const angle = (hour / 24) * 360;
-              const pos = polarToCartesian(cx, cy, radius - 18, angle);
-              return (
-                <text key={hour} x={pos.x} y={pos.y} textAnchor="middle" dominantBaseline="middle"
-                  fill="#8e8e93" fontSize="11" fontWeight="300">
-                  {hour}
-                </text>
-              );
-            })}
+            return (
+              <div
+                key={index}
+                className="absolute left-0 right-0 bg-indigo-100 z-10"
+                style={{
+                  top: `${topPercent}%`,
+                  height: `${heightPercent}%`,
+                }}
+              >
+                {/* Top drag handle */}
+                <div
+                  className="absolute top-0 left-0 right-0 h-6 bg-indigo-200 cursor-ns-resize flex items-center justify-between px-4"
+                  onMouseDown={() => setDragging({ type: "napStart", index })}
+                >
+                  <span className="text-indigo-600 text-sm">Nap {index + 1} start</span>
+                  <span className="text-indigo-600 text-sm font-medium">{formatTime(nap.startMinutes)}</span>
+                </div>
 
-            {/* Inner circle */}
-            <circle cx={cx} cy={cy} r={radius - 32} fill="#1c1c1e" stroke="#3a3a3c" strokeWidth="1" />
+                {/* Nap content */}
+                <div className="absolute inset-0 flex items-center justify-center">
+                  <div className="text-center">
+                    <div className="text-2xl mb-1">🌙</div>
+                    <div className="text-indigo-600 font-semibold">{formatDuration(duration)}</div>
+                  </div>
+                </div>
 
-            {/* Center icons */}
-            <text x={cx} y={cy - 45} textAnchor="middle" fontSize="16">🌙</text>
-            <text x={cx} y={cy + 45} textAnchor="middle" fontSize="16">☀️</text>
+                {/* Bottom drag handle */}
+                <div
+                  className="absolute bottom-0 left-0 right-0 h-6 bg-indigo-200 cursor-ns-resize flex items-center justify-between px-4"
+                  onMouseDown={() => setDragging({ type: "napEnd", index })}
+                >
+                  <span className="text-indigo-600 text-sm">Nap {index + 1} end</span>
+                  <span className="text-indigo-600 text-sm font-medium">{formatTime(nap.endMinutes)}</span>
+                </div>
+              </div>
+            );
+          })}
 
-            {/* Night sleep arc (orange) */}
-            <path
-              d={describeArc(cx, cy, radius - 10, minutesToAngle(schedule.bedtime), minutesToAngle(schedule.wakeTime))}
-              fill="none" stroke="#f5a623" strokeWidth={arcWidth} strokeLinecap="round"
-            />
-
-            {/* Nap arcs (indigo) */}
-            {schedule.naps.map((nap, index) => {
-              const startAngle = minutesToAngle(nap.startMinutes);
-              const endAngle = minutesToAngle(nap.endMinutes);
-              const startPos = polarToCartesian(cx, cy, radius - 10, startAngle);
-              const endPos = polarToCartesian(cx, cy, radius - 10, endAngle);
-              const midAngle = (startAngle + endAngle) / 2;
-              const midPos = polarToCartesian(cx, cy, radius - 10, midAngle);
-
-              return (
-                <g key={index}>
-                  {/* Nap arc */}
-                  <path
-                    d={describeArc(cx, cy, radius - 10, startAngle, endAngle)}
-                    fill="none" stroke="#8b5cf6" strokeWidth={arcWidth} strokeLinecap="round"
-                  />
-
-                  {/* Nap duration label */}
-                  <text x={midPos.x} y={midPos.y} textAnchor="middle" dominantBaseline="middle"
-                    fill="white" fontSize="9" fontWeight="500">
-                    {formatDuration(nap.endMinutes - nap.startMinutes)}
-                  </text>
-
-                  {/* Start handle */}
-                  <circle cx={startPos.x} cy={startPos.y} r={handleRadius}
-                    fill="#8b5cf6" stroke="#1c1c1e" strokeWidth="2"
-                    className="cursor-grab" onMouseDown={() => setDragging({ type: "napStart", index })} />
-
-                  {/* End handle */}
-                  <circle cx={endPos.x} cy={endPos.y} r={handleRadius}
-                    fill="#8b5cf6" stroke="#1c1c1e" strokeWidth="2"
-                    className="cursor-grab" onMouseDown={() => setDragging({ type: "napEnd", index })} />
-                </g>
-              );
-            })}
-
-            {/* Bedtime handle */}
-            {(() => {
-              const pos = polarToCartesian(cx, cy, radius - 10, minutesToAngle(schedule.bedtime));
-              return (
-                <g>
-                  <circle cx={pos.x} cy={pos.y} r={handleRadius + 2}
-                    fill="#f5a623" stroke="#1c1c1e" strokeWidth="2"
-                    className="cursor-grab" onMouseDown={() => setDragging({ type: "bedtime" })} />
-                  <text x={pos.x} y={pos.y} textAnchor="middle" dominantBaseline="middle" fontSize="8">🛏️</text>
-                </g>
-              );
-            })()}
-
-            {/* Wake handle */}
-            {(() => {
-              const pos = polarToCartesian(cx, cy, radius - 10, minutesToAngle(schedule.wakeTime));
-              return (
-                <g>
-                  <circle cx={pos.x} cy={pos.y} r={handleRadius + 2}
-                    fill="#f5a623" stroke="#1c1c1e" strokeWidth="2"
-                    className="cursor-grab" onMouseDown={() => setDragging({ type: "wake" })} />
-                  <text x={pos.x} y={pos.y} textAnchor="middle" dominantBaseline="middle" fontSize="8">⏰</text>
-                </g>
-              );
-            })()}
-          </svg>
-        </div>
-
-        {/* Duration Display */}
-        <div className="text-center mb-4">
-          <div className="text-white text-xl font-semibold">{formatDuration(nightSleep)} night</div>
-          <div className="text-purple-400 text-sm">{formatDuration(daytimeSleep)} daytime naps</div>
-          <div className={`text-xs mt-1 ${sleepIdeal ? 'text-green-500' : 'text-gray-500'}`}>
-            {sleepIdeal ? "✓ Meets sleep goal" : "Aim for 10-12h night sleep"}
+          {/* Bedtime marker */}
+          <div
+            className="absolute left-0 right-0 h-12 bg-slate-200 border-y-2 border-slate-400 flex items-center justify-between px-4 cursor-ns-resize z-20"
+            style={{ top: `${minutesToPercent(schedule.bedtime)}%`, transform: 'translateY(-50%)' }}
+            onMouseDown={() => setDragging({ type: "bedtime" })}
+          >
+            <span className="text-slate-700 font-medium">🌙 Bedtime</span>
+            <span className="text-slate-700 font-semibold">{formatTime(schedule.bedtime)}</span>
           </div>
         </div>
+      </div>
 
-        {/* Legend */}
-        <div className="bg-[#2c2c2e] rounded-xl p-3 space-y-2">
-          <div className="flex items-center gap-2">
-            <div className="w-3 h-3 rounded-full bg-[#f5a623]"></div>
-            <span className="text-gray-400 text-sm flex-1">Night sleep</span>
-            <span className={`text-xs ${bedtimeIdeal && wakeIdeal ? 'text-green-500' : 'text-amber-500'}`}>
-              {bedtimeIdeal && wakeIdeal ? '✓ ideal times' : '7-8pm → 6-7am'}
-            </span>
+      {/* Footer summary */}
+      <footer className="fixed bottom-0 left-0 right-0 bg-white border-t border-slate-200 px-4 py-3">
+        <div className="flex justify-around max-w-md mx-auto text-center">
+          <div>
+            <div className="text-lg font-semibold text-slate-800">{formatDuration(nightSleep)}</div>
+            <div className="text-xs text-slate-500">Night sleep</div>
           </div>
-          <div className="flex items-center gap-2">
-            <div className="w-3 h-3 rounded-full bg-[#8b5cf6]"></div>
-            <span className="text-gray-400 text-sm flex-1">Daytime naps</span>
-            <span className="text-gray-500 text-xs">Drag to adjust</span>
+          <div>
+            <div className="text-lg font-semibold text-indigo-600">{formatDuration(daytimeSleep)}</div>
+            <div className="text-xs text-slate-500">Daytime naps</div>
+          </div>
+          <div>
+            <div className="text-lg font-semibold text-amber-600">{schedule.naps.length}</div>
+            <div className="text-xs text-slate-500">Naps</div>
           </div>
         </div>
-      </main>
+      </footer>
     </div>
   );
 }
