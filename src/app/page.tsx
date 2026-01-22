@@ -277,12 +277,12 @@ export default function Home() {
 
           {/* Wake marker */}
           <div
-            className="absolute left-0 right-0 h-12 bg-yellow-100 border-y-2 border-yellow-300 flex items-center justify-between px-4 cursor-ns-resize z-20"
+            className="absolute left-0 right-0 h-6 bg-yellow-100 border-y border-yellow-300 flex items-center justify-between px-4 cursor-ns-resize z-20"
             style={{ top: `${minutesToPercent(schedule.wakeTime)}%`, transform: 'translateY(-50%)' }}
             onMouseDown={() => setDragging({ type: "wake" })}
           >
-            <span className="text-yellow-700 font-medium">☀️ Wake up</span>
-            <span className="text-yellow-700 font-semibold">{formatTime(schedule.wakeTime)}</span>
+            <span className="text-yellow-700 font-medium text-sm">Wake up</span>
+            <span className="text-yellow-700 font-semibold text-sm">{formatTime(schedule.wakeTime)}</span>
           </div>
 
           {/* Nap blocks */}
@@ -302,28 +302,23 @@ export default function Home() {
               >
                 {/* Top drag handle */}
                 <div
-                  className="absolute top-0 left-0 right-0 h-6 bg-indigo-200 cursor-ns-resize flex items-center justify-between px-4"
+                  className="absolute top-0 left-0 right-0 h-4 bg-indigo-200 cursor-ns-resize flex items-center justify-end px-4"
                   onMouseDown={() => setDragging({ type: "napStart", index })}
                 >
-                  <span className="text-indigo-600 text-sm">Nap {index + 1} start</span>
-                  <span className="text-indigo-600 text-sm font-medium">{formatTime(nap.startMinutes)}</span>
+                  <span className="text-indigo-600 text-xs font-medium">{formatTime(nap.startMinutes)}</span>
                 </div>
 
                 {/* Nap content */}
                 <div className="absolute inset-0 flex items-center justify-center">
-                  <div className="text-center">
-                    <div className="text-2xl mb-1">🌙</div>
-                    <div className="text-indigo-600 font-semibold">{formatDuration(duration)}</div>
-                  </div>
+                  <span className="text-indigo-600 font-semibold">Nap {index + 1} · {formatDuration(duration)}</span>
                 </div>
 
                 {/* Bottom drag handle */}
                 <div
-                  className="absolute bottom-0 left-0 right-0 h-6 bg-indigo-200 cursor-ns-resize flex items-center justify-between px-4"
+                  className="absolute bottom-0 left-0 right-0 h-4 bg-indigo-200 cursor-ns-resize flex items-center justify-end px-4"
                   onMouseDown={() => setDragging({ type: "napEnd", index })}
                 >
-                  <span className="text-indigo-600 text-sm">Nap {index + 1} end</span>
-                  <span className="text-indigo-600 text-sm font-medium">{formatTime(nap.endMinutes)}</span>
+                  <span className="text-indigo-600 text-xs font-medium">{formatTime(nap.endMinutes)}</span>
                 </div>
               </div>
             );
@@ -331,12 +326,12 @@ export default function Home() {
 
           {/* Bedtime marker */}
           <div
-            className="absolute left-0 right-0 h-12 bg-slate-200 border-y-2 border-slate-400 flex items-center justify-between px-4 cursor-ns-resize z-20"
+            className="absolute left-0 right-0 h-6 bg-slate-200 border-y border-slate-400 flex items-center justify-between px-4 cursor-ns-resize z-20"
             style={{ top: `${minutesToPercent(schedule.bedtime)}%`, transform: 'translateY(-50%)' }}
             onMouseDown={() => setDragging({ type: "bedtime" })}
           >
-            <span className="text-slate-700 font-medium">🌙 Bedtime</span>
-            <span className="text-slate-700 font-semibold">{formatTime(schedule.bedtime)}</span>
+            <span className="text-slate-700 font-medium text-sm">Bedtime</span>
+            <span className="text-slate-700 font-semibold text-sm">{formatTime(schedule.bedtime)}</span>
           </div>
         </div>
       </div>
