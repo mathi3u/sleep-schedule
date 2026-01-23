@@ -277,12 +277,17 @@ export default function Home() {
 
           {/* Wake marker */}
           <div
-            className="absolute left-0 right-0 h-6 bg-yellow-100 border-y border-yellow-300 flex items-center justify-center gap-2 cursor-ns-resize z-20"
-            style={{ top: `${minutesToPercent(schedule.wakeTime)}%`, transform: 'translateY(-50%)' }}
-            onMouseDown={() => setDragging({ type: "wake" })}
+            className="absolute left-0 right-0 z-20"
+            style={{ top: `${minutesToPercent(schedule.wakeTime)}%` }}
           >
-            <span className="text-yellow-700 font-medium text-sm">Wake up</span>
-            <span className="text-yellow-700 font-semibold text-sm">{formatTime(schedule.wakeTime)}</span>
+            <div className="absolute bottom-full left-0 right-0 flex items-center justify-center gap-2 pb-1">
+              <span className="text-slate-300 font-medium text-sm">Wake up</span>
+              <span className="text-slate-300 font-semibold text-sm">{formatTime(schedule.wakeTime)}</span>
+            </div>
+            <div
+              className="h-1 bg-yellow-300 cursor-ns-resize"
+              onMouseDown={() => setDragging({ type: "wake" })}
+            />
           </div>
 
           {/* Nap blocks */}
@@ -336,12 +341,17 @@ export default function Home() {
 
           {/* Bedtime marker */}
           <div
-            className="absolute left-0 right-0 h-6 bg-yellow-100 border-y border-yellow-300 flex items-center justify-center gap-2 cursor-ns-resize z-20"
-            style={{ top: `${minutesToPercent(schedule.bedtime)}%`, transform: 'translateY(-50%)' }}
-            onMouseDown={() => setDragging({ type: "bedtime" })}
+            className="absolute left-0 right-0 z-20"
+            style={{ top: `${minutesToPercent(schedule.bedtime)}%` }}
           >
-            <span className="text-yellow-700 font-medium text-sm">Bedtime</span>
-            <span className="text-yellow-700 font-semibold text-sm">{formatTime(schedule.bedtime)}</span>
+            <div
+              className="h-1 bg-yellow-300 cursor-ns-resize"
+              onMouseDown={() => setDragging({ type: "bedtime" })}
+            />
+            <div className="absolute top-full left-0 right-0 flex items-center justify-center gap-2 pt-1">
+              <span className="text-slate-300 font-medium text-sm">Bedtime</span>
+              <span className="text-slate-300 font-semibold text-sm">{formatTime(schedule.bedtime)}</span>
+            </div>
           </div>
         </div>
       </div>
