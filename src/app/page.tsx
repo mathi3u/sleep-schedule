@@ -81,7 +81,7 @@ export default function Home() {
   );
 
   const timelineRef = useRef<HTMLDivElement>(null);
-  const [dragging, setDragging] = useState<{ type: string; index?: number } | null>(null);
+  const [dragging, setDragging] = useState<{ type: string; index?: number; offset?: number } | null>(null);
 
   useEffect(() => {
     setSchedule(generateSchedule(ageMonths, numNaps, schedule.wakeTime));
@@ -111,13 +111,9 @@ export default function Home() {
       const updated = { ...prev, naps: [...prev.naps] };
 
       if (dragging.type === "wake") {
-        const delta = minutes - updated.wakeTime;
-        updated.wakeTime = minutes;
-        updated.naps = updated.naps.map((nap) => ({
-          startMinutes: nap.startMinutes + delta,
-          endMinutes: nap.endMinutes + delta,
-        }));
-        updated.bedtime += delta;
+        const firstNap = updated.naps[0];
+        const maxWake = firstNap ? firstNap.startMinutes - 30 : updated.bedtime - 60;
+        updated.wakeTime = Math.min(minutes, maxWake);
       } else if (dragging.type === "bedtime") {
         const lastNap = updated.naps[updated.naps.length - 1];
         const minBedtime = lastNap ? lastNap.endMinutes + 30 : updated.wakeTime + 60;
@@ -141,6 +137,24 @@ export default function Home() {
         updated.naps[dragging.index] = {
           ...nap,
           endMinutes: Math.max(minEnd, Math.min(maxEnd, minutes)),
+        };
+      } else if (dragging.type === "napMove" && dragging.index !== undefined && dragging.offset !== undefined) {
+        const nap = updated.naps[dragging.index];
+        const duration = nap.endMinutes - nap.startMinutes;
+        const newStart = minutes - dragging.offset;
+
+        const minStart = dragging.index === 0
+          ? updated.wakeTime + 30
+          : updated.naps[dragging.index - 1].endMinutes + 30;
+        const maxEnd = dragging.index < updated.naps.length - 1
+          ? updated.naps[dragging.index + 1].startMinutes - 30
+          : updated.bedtime - 30;
+        const maxStart = maxEnd - duration;
+
+        const clampedStart = Math.max(minStart, Math.min(maxStart, newStart));
+        updated.naps[dragging.index] = {
+          startMinutes: clampedStart,
+          endMinutes: clampedStart + duration,
         };
       }
 
@@ -294,8 +308,18 @@ export default function Home() {
                   <span className="text-indigo-600 text-xs font-medium">{formatTime(nap.startMinutes)}</span>
                 </div>
 
-                {/* Nap content */}
-                <div className="absolute inset-0 flex items-center justify-center">
+                {/* Nap content (draggable middle area) */}
+                <div
+                  className="absolute top-4 bottom-4 left-0 right-0 flex items-center justify-center cursor-grab active:cursor-grabbing"
+                  onMouseDown={(e) => {
+                    const rect = e.currentTarget.getBoundingClientRect();
+                    const clickY = e.clientY - rect.top;
+                    const napHeight = rect.height;
+                    const offsetRatio = clickY / napHeight;
+                    const offsetMinutes = Math.round(offsetRatio * duration);
+                    setDragging({ type: "napMove", index, offset: offsetMinutes });
+                  }}
+                >
                   <span className="text-indigo-600 font-semibold">Nap {index + 1} · {formatDuration(duration)}</span>
                 </div>
 
