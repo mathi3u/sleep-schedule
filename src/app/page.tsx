@@ -194,9 +194,9 @@ export default function Home() {
   const awakeWindows = getAwakeWindows();
 
   return (
-    <div className="min-h-screen bg-slate-50">
+    <div className="min-h-screen night-sky">
       {/* Header */}
-      <header className="night-sky px-4 py-4">
+      <header className="px-4 py-4 relative z-10">
         <h1 className="text-lg font-semibold text-slate-200 text-center">Sleep Schedule</h1>
 
         {/* Controls */}
@@ -244,23 +244,6 @@ export default function Home() {
 
         {/* Main timeline area */}
         <div className="absolute left-0 right-0 top-0 bottom-0">
-          {/* Morning night (midnight to wake) */}
-          <div
-            className="absolute left-0 right-0 night-sky"
-            style={{
-              top: '0%',
-              height: `${minutesToPercent(schedule.wakeTime)}%`,
-            }}
-          />
-
-          {/* Evening night (bedtime to midnight) */}
-          <div
-            className="absolute left-0 right-0 night-sky"
-            style={{
-              top: `${minutesToPercent(schedule.bedtime)}%`,
-              height: `${100 - minutesToPercent(schedule.bedtime)}%`,
-            }}
-          />
 
           {/* Awake windows (cream/beige) */}
           {awakeWindows.map((window, i) => (
@@ -280,7 +263,7 @@ export default function Home() {
 
           {/* Wake marker */}
           <div
-            className="absolute left-0 right-0 h-6 bg-yellow-100 border-y border-yellow-300 flex items-center justify-between px-4 cursor-ns-resize z-20"
+            className="absolute left-0 right-0 h-6 bg-yellow-100 border-y border-yellow-300 flex items-center justify-center gap-2 cursor-ns-resize z-20"
             style={{ top: `${minutesToPercent(schedule.wakeTime)}%`, transform: 'translateY(-50%)' }}
             onMouseDown={() => setDragging({ type: "wake" })}
           >
@@ -329,7 +312,7 @@ export default function Home() {
 
           {/* Bedtime marker */}
           <div
-            className="absolute left-0 right-0 h-6 bg-yellow-100 border-y border-yellow-300 flex items-center justify-between px-4 cursor-ns-resize z-20"
+            className="absolute left-0 right-0 h-6 bg-yellow-100 border-y border-yellow-300 flex items-center justify-center gap-2 cursor-ns-resize z-20"
             style={{ top: `${minutesToPercent(schedule.bedtime)}%`, transform: 'translateY(-50%)' }}
             onMouseDown={() => setDragging({ type: "bedtime" })}
           >
@@ -340,19 +323,19 @@ export default function Home() {
       </div>
 
       {/* Footer summary */}
-      <footer className="fixed bottom-0 left-0 right-0 bg-white border-t border-slate-200 px-4 py-3">
+      <footer className="fixed bottom-0 left-0 right-0 bg-indigo-950/90 border-t border-indigo-800 px-4 py-3">
         <div className="flex justify-around max-w-md mx-auto text-center">
           <div>
-            <div className="text-lg font-semibold text-slate-800">{formatDuration(nightSleep)}</div>
-            <div className="text-xs text-slate-500">Night sleep</div>
+            <div className="text-lg font-semibold text-slate-200">{formatDuration(nightSleep)}</div>
+            <div className="text-xs text-slate-400">Night sleep</div>
           </div>
           <div>
-            <div className="text-lg font-semibold text-indigo-600">{formatDuration(daytimeSleep)}</div>
-            <div className="text-xs text-slate-500">Daytime naps</div>
+            <div className="text-lg font-semibold text-indigo-300">{formatDuration(daytimeSleep)}</div>
+            <div className="text-xs text-slate-400">Daytime naps</div>
           </div>
           <div>
-            <div className="text-lg font-semibold text-amber-600">{schedule.naps.length}</div>
-            <div className="text-xs text-slate-500">Naps</div>
+            <div className="text-lg font-semibold text-amber-400">{schedule.naps.length}</div>
+            <div className="text-xs text-slate-400">Naps</div>
           </div>
         </div>
       </footer>
