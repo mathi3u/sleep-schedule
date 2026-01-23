@@ -241,27 +241,9 @@ export default function Home() {
           cursor: dragging ? 'ns-resize' : 'default'
         }}
       >
-        {/* Time markers */}
-        <div className="absolute left-0 top-0 bottom-0 w-12 border-r border-slate-200 z-10">
-          {[0, 2, 4, 6, 8, 10, 12, 14, 16, 18, 20, 22, 24].map((hour) => {
-            const percent = minutesToPercent(hour * 60);
-            const displayHour = hour === 0 || hour === 24 ? 12 : hour > 12 ? hour - 12 : hour;
-            const period = hour === 0 || hour === 24 ? 'a' : hour >= 12 && hour < 24 ? 'p' : 'a';
-            const isNight = hour < 6 || hour >= 20;
-            return (
-              <div
-                key={hour}
-                className={`absolute left-0 right-0 text-xs text-right pr-2 ${isNight ? 'text-slate-300' : 'text-slate-400'}`}
-                style={{ top: `${percent}%`, transform: 'translateY(-50%)' }}
-              >
-                {displayHour}{period}
-              </div>
-            );
-          })}
-        </div>
 
         {/* Main timeline area */}
-        <div className="absolute left-12 right-0 top-0 bottom-0">
+        <div className="absolute left-0 right-0 top-0 bottom-0">
           {/* Morning night (midnight to wake) */}
           <div
             className="absolute left-0 right-0 night-sky"
