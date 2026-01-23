@@ -196,13 +196,13 @@ export default function Home() {
   return (
     <div className="min-h-screen bg-slate-50">
       {/* Header */}
-      <header className="bg-white border-b border-slate-200 px-4 py-4">
-        <h1 className="text-lg font-semibold text-slate-800 text-center">Sleep Schedule</h1>
+      <header className="night-sky px-4 py-4">
+        <h1 className="text-lg font-semibold text-slate-200 text-center">Sleep Schedule</h1>
 
         {/* Controls */}
         <div className="flex gap-4 mt-3 max-w-md mx-auto">
           <div className="flex-1">
-            <label className="text-xs text-slate-500 block mb-1">Age (months)</label>
+            <label className="text-xs text-slate-400 block mb-1">Age (months)</label>
             <select
               value={ageMonths}
               onChange={(e) => {
@@ -210,7 +210,7 @@ export default function Home() {
                 setAgeMonths(age);
                 setNumNaps(getSuggestedNaps(age));
               }}
-              className="w-full px-3 py-2 bg-slate-100 rounded-lg text-slate-800 text-sm focus:outline-none focus:ring-2 focus:ring-slate-300"
+              className="w-full px-3 py-2 bg-indigo-900/50 rounded-lg text-slate-200 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-400"
             >
               {Array.from({ length: 24 }, (_, i) => (
                 <option key={i} value={i + 1}>{i + 1}</option>
@@ -218,11 +218,11 @@ export default function Home() {
             </select>
           </div>
           <div className="flex-1">
-            <label className="text-xs text-slate-500 block mb-1">Naps</label>
+            <label className="text-xs text-slate-400 block mb-1">Naps</label>
             <select
               value={numNaps}
               onChange={(e) => setNumNaps(Number(e.target.value))}
-              className="w-full px-3 py-2 bg-slate-100 rounded-lg text-slate-800 text-sm focus:outline-none focus:ring-2 focus:ring-slate-300"
+              className="w-full px-3 py-2 bg-indigo-900/50 rounded-lg text-slate-200 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-400"
             >
               {[1, 2, 3, 4, 5].map((n) => (
                 <option key={n} value={n}>{n}</option>
@@ -251,13 +251,7 @@ export default function Home() {
               top: '0%',
               height: `${minutesToPercent(schedule.wakeTime)}%`,
             }}
-          >
-            <div className="absolute inset-0 flex items-center justify-center">
-              <span className="text-slate-300 text-sm font-medium">
-                {formatDuration(schedule.wakeTime)} night
-              </span>
-            </div>
-          </div>
+          />
 
           {/* Evening night (bedtime to midnight) */}
           <div
@@ -266,13 +260,7 @@ export default function Home() {
               top: `${minutesToPercent(schedule.bedtime)}%`,
               height: `${100 - minutesToPercent(schedule.bedtime)}%`,
             }}
-          >
-            <div className="absolute inset-0 flex items-center justify-center">
-              <span className="text-slate-300 text-sm font-medium">
-                {formatDuration(24 * 60 - schedule.bedtime)} night
-              </span>
-            </div>
-          </div>
+          />
 
           {/* Awake windows (cream/beige) */}
           {awakeWindows.map((window, i) => (
@@ -341,12 +329,12 @@ export default function Home() {
 
           {/* Bedtime marker */}
           <div
-            className="absolute left-0 right-0 h-6 bg-slate-200 border-y border-slate-400 flex items-center justify-between px-4 cursor-ns-resize z-20"
+            className="absolute left-0 right-0 h-6 bg-yellow-100 border-y border-yellow-300 flex items-center justify-between px-4 cursor-ns-resize z-20"
             style={{ top: `${minutesToPercent(schedule.bedtime)}%`, transform: 'translateY(-50%)' }}
             onMouseDown={() => setDragging({ type: "bedtime" })}
           >
-            <span className="text-slate-700 font-medium text-sm">Bedtime</span>
-            <span className="text-slate-700 font-semibold text-sm">{formatTime(schedule.bedtime)}</span>
+            <span className="text-yellow-700 font-medium text-sm">Bedtime</span>
+            <span className="text-yellow-700 font-semibold text-sm">{formatTime(schedule.bedtime)}</span>
           </div>
         </div>
       </div>

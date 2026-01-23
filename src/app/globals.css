@@ -35,6 +35,7 @@ body {
   content: '';
   position: absolute;
   inset: 0;
+  pointer-events: none;
   background-image:
     radial-gradient(1px 1px at 10% 20%, white, transparent),
     radial-gradient(1px 1px at 20% 50%, white, transparent),
