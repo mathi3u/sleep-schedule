@@ -87,9 +87,9 @@ export default function Home() {
     setSchedule(generateSchedule(ageMonths, numNaps, schedule.wakeTime));
   }, [ageMonths, numNaps]);
 
-  // Timeline: 5am to 10pm
-  const timelineStart = 5 * 60;
-  const timelineEnd = 22 * 60;
+  // Timeline: midnight to midnight (full 24h)
+  const timelineStart = 0;
+  const timelineEnd = 24 * 60;
   const timelineRange = timelineEnd - timelineStart;
 
   const minutesToPercent = (minutes: number) => {
@@ -242,16 +242,19 @@ export default function Home() {
         }}
       >
         {/* Time markers */}
-        <div className="absolute left-0 top-0 bottom-0 w-12 bg-white border-r border-slate-200 z-10">
-          {[5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22].map((hour) => {
+        <div className="absolute left-0 top-0 bottom-0 w-12 border-r border-slate-200 z-10">
+          {[0, 2, 4, 6, 8, 10, 12, 14, 16, 18, 20, 22, 24].map((hour) => {
             const percent = minutesToPercent(hour * 60);
+            const displayHour = hour === 0 || hour === 24 ? 12 : hour > 12 ? hour - 12 : hour;
+            const period = hour === 0 || hour === 24 ? 'a' : hour >= 12 && hour < 24 ? 'p' : 'a';
+            const isNight = hour < 6 || hour >= 20;
             return (
               <div
                 key={hour}
-                className="absolute left-0 right-0 text-xs text-slate-400 text-right pr-2"
+                className={`absolute left-0 right-0 text-xs text-right pr-2 ${isNight ? 'text-slate-300' : 'text-slate-400'}`}
                 style={{ top: `${percent}%`, transform: 'translateY(-50%)' }}
               >
-                {hour > 12 ? hour - 12 : hour}{hour >= 12 ? 'p' : 'a'}
+                {displayHour}{period}
               </div>
             );
           })}
@@ -259,6 +262,36 @@ export default function Home() {
 
         {/* Main timeline area */}
         <div className="absolute left-12 right-0 top-0 bottom-0">
+          {/* Morning night (midnight to wake) */}
+          <div
+            className="absolute left-0 right-0 night-sky"
+            style={{
+              top: '0%',
+              height: `${minutesToPercent(schedule.wakeTime)}%`,
+            }}
+          >
+            <div className="absolute inset-0 flex items-center justify-center">
+              <span className="text-slate-300 text-sm font-medium">
+                {formatDuration(schedule.wakeTime)} night
+              </span>
+            </div>
+          </div>
+
+          {/* Evening night (bedtime to midnight) */}
+          <div
+            className="absolute left-0 right-0 night-sky"
+            style={{
+              top: `${minutesToPercent(schedule.bedtime)}%`,
+              height: `${100 - minutesToPercent(schedule.bedtime)}%`,
+            }}
+          >
+            <div className="absolute inset-0 flex items-center justify-center">
+              <span className="text-slate-300 text-sm font-medium">
+                {formatDuration(24 * 60 - schedule.bedtime)} night
+              </span>
+            </div>
+          </div>
+
           {/* Awake windows (cream/beige) */}
           {awakeWindows.map((window, i) => (
             <div
