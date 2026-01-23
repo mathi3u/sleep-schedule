@@ -29,11 +29,64 @@ function formatDuration(minutes: number): string {
   return `${hrs}h ${mins}m`;
 }
 
+function formatDurationHrs(minutes: number): string {
+  const hrs = minutes / 60;
+  if (hrs % 1 === 0) return `${hrs}hrs`;
+  return `${hrs.toFixed(1)}hrs`;
+}
+
+function formatTimeShort(minutes: number): string {
+  const hours = Math.floor(((minutes % 1440) + 1440) % 1440 / 60);
+  const mins = ((minutes % 60) + 60) % 60;
+  const displayHours = hours === 0 ? 12 : hours > 12 ? hours - 12 : hours;
+  return `${displayHours}:${mins.toString().padStart(2, "0")}`;
+}
+
+function formatTimeRange(startMinutes: number, endMinutes: number): string {
+  const startHours = Math.floor(((startMinutes % 1440) + 1440) % 1440 / 60);
+  const endHours = Math.floor(((endMinutes % 1440) + 1440) % 1440 / 60);
+  const startPeriod = startHours >= 12 ? "PM" : "AM";
+  const endPeriod = endHours >= 12 ? "PM" : "AM";
+
+  if (startPeriod === endPeriod) {
+    return `${formatTimeShort(startMinutes)} - ${formatTimeShort(endMinutes)} ${endPeriod}`;
+  }
+  return `${formatTimeShort(startMinutes)} ${startPeriod} - ${formatTimeShort(endMinutes)} ${endPeriod}`;
+}
+
+function getAwakeWindowRange(ageMonths: number): { min: number; max: number } {
+  if (ageMonths < 3) return { min: 45, max: 60 };
+  if (ageMonths < 6) return { min: 90, max: 150 };
+  if (ageMonths < 9) return { min: 120, max: 180 };
+  if (ageMonths < 12) return { min: 180, max: 240 };
+  return { min: 180, max: 300 }; // 12+ months
+}
+
 function getAwakeWindow(ageMonths: number): number {
-  if (ageMonths < 3) return 52;
-  if (ageMonths < 6) return 120;
-  if (ageMonths < 9) return 150;
-  return 210;
+  const range = getAwakeWindowRange(ageMonths);
+  return Math.round((range.min + range.max) / 2);
+}
+
+function getNapDurationRange(ageMonths: number, isLastNap: boolean): { min: number; max: number } {
+  if (isLastNap) return { min: 20, max: 45 }; // catnap
+  if (ageMonths < 3) return { min: 30, max: 60 };
+  if (ageMonths < 6) return { min: 45, max: 90 };
+  if (ageMonths < 9) return { min: 60, max: 120 };
+  return { min: 60, max: 120 };
+}
+
+function isAwakeWindowOutOfRange(duration: number, ageMonths: number): "short" | "long" | null {
+  const range = getAwakeWindowRange(ageMonths);
+  if (duration < range.min) return "short";
+  if (duration > range.max) return "long";
+  return null;
+}
+
+function isNapOutOfRange(duration: number, ageMonths: number, isLastNap: boolean): "short" | "long" | null {
+  const range = getNapDurationRange(ageMonths, isLastNap);
+  if (duration < range.min) return "short";
+  if (duration > range.max) return "long";
+  return null;
 }
 
 function getNapDuration(ageMonths: number, napNumber: number, totalNaps: number): number {
@@ -77,7 +130,7 @@ export default function Home() {
   const [ageMonths, setAgeMonths] = useState(6);
   const [numNaps, setNumNaps] = useState(3);
   const [schedule, setSchedule] = useState<Schedule>(() =>
-    generateSchedule(6, 3, 6 * 60 + 30)
+    generateSchedule(6, 3, 7 * 60 + 30)
   );
 
   const timelineRef = useRef<HTMLDivElement>(null);
@@ -87,9 +140,9 @@ export default function Home() {
     setSchedule(generateSchedule(ageMonths, numNaps, schedule.wakeTime));
   }, [ageMonths, numNaps]);
 
-  // Timeline: midnight to midnight (full 24h)
-  const timelineStart = 0;
-  const timelineEnd = 24 * 60;
+  // Timeline: 5am to 11pm (focus on active hours)
+  const timelineStart = 5 * 60;
+  const timelineEnd = 23 * 60;
   const timelineRange = timelineEnd - timelineStart;
 
   const minutesToPercent = (minutes: number) => {
@@ -244,6 +297,15 @@ export default function Home() {
             </select>
           </div>
         </div>
+
+        {/* Recommended ranges */}
+        <div className="mt-3 max-w-md mx-auto text-center text-xs text-slate-400">
+          <span>Awake: {formatDuration(getAwakeWindowRange(ageMonths).min)}-{formatDuration(getAwakeWindowRange(ageMonths).max)}</span>
+          <span className="mx-2">·</span>
+          <span>Naps: {formatDuration(getNapDurationRange(ageMonths, false).min)}-{formatDuration(getNapDurationRange(ageMonths, false).max)}</span>
+          <span className="mx-2">·</span>
+          <span>Last nap: {formatDuration(getNapDurationRange(ageMonths, true).min)}-{formatDuration(getNapDurationRange(ageMonths, true).max)}</span>
+        </div>
       </header>
 
       {/* Timeline */}
@@ -260,29 +322,32 @@ export default function Home() {
         <div className="absolute left-0 right-0 top-0 bottom-0">
 
           {/* Awake windows (cream/beige) */}
-          {awakeWindows.map((window, i) => (
-            <div
-              key={`awake-${i}`}
-              className="absolute left-0 right-0 bg-amber-50 flex items-center justify-center"
-              style={{
-                top: `${minutesToPercent(window.start)}%`,
-                height: `${minutesToPercent(window.end) - minutesToPercent(window.start)}%`,
-              }}
-            >
-              <span className="text-amber-600 text-sm font-medium">
-                {formatDuration(window.end - window.start)} awake
-              </span>
-            </div>
-          ))}
+          {awakeWindows.map((window, i) => {
+            const duration = window.end - window.start;
+            const warning = isAwakeWindowOutOfRange(duration, ageMonths);
+            return (
+              <div
+                key={`awake-${i}`}
+                className="absolute left-0 right-0 flex items-center justify-center bg-amber-50"
+                style={{
+                  top: `${minutesToPercent(window.start)}%`,
+                  height: `${minutesToPercent(window.end) - minutesToPercent(window.start)}%`,
+                }}
+              >
+                <span className="text-amber-600 text-sm">
+                  {formatDuration(duration)} awake {warning && <span className={warning === "short" ? "text-orange-500" : "text-red-500"}>⚠</span>}
+                </span>
+              </div>
+            );
+          })}
 
           {/* Wake marker */}
           <div
             className="absolute left-0 right-0 z-20"
             style={{ top: `${minutesToPercent(schedule.wakeTime)}%` }}
           >
-            <div className="absolute bottom-full left-0 right-0 flex items-center justify-center gap-2 pb-1">
-              <span className="text-slate-300 font-medium text-sm">Wake up</span>
-              <span className="text-slate-300 font-semibold text-sm">{formatTime(schedule.wakeTime)}</span>
+            <div className="absolute bottom-full left-0 right-0 flex items-center justify-center pb-1">
+              <span className="text-slate-300 text-sm">Wake up · {formatTime(schedule.wakeTime)}</span>
             </div>
             <div
               className="h-1 bg-yellow-300 cursor-ns-resize"
@@ -295,46 +360,47 @@ export default function Home() {
             const topPercent = minutesToPercent(nap.startMinutes);
             const heightPercent = minutesToPercent(nap.endMinutes) - topPercent;
             const duration = nap.endMinutes - nap.startMinutes;
+            const isLastNap = index === schedule.naps.length - 1;
+            const warning = isNapOutOfRange(duration, ageMonths, isLastNap);
 
             return (
               <div
                 key={index}
-                className="absolute left-0 right-0 bg-indigo-100 z-10"
+                className="absolute left-0 right-0 z-10 flex items-center justify-center bg-indigo-200"
                 style={{
                   top: `${topPercent}%`,
                   height: `${heightPercent}%`,
                 }}
-              >
-                {/* Top drag handle */}
-                <div
-                  className="absolute top-0 left-0 right-0 h-4 bg-indigo-200 cursor-ns-resize flex items-center justify-end px-4"
-                  onMouseDown={() => setDragging({ type: "napStart", index })}
-                >
-                  <span className="text-indigo-600 text-xs font-medium">{formatTime(nap.startMinutes)}</span>
-                </div>
+                onMouseMove={(e) => {
+                  const rect = e.currentTarget.getBoundingClientRect();
+                  const y = e.clientY - rect.top;
+                  const edgeZone = 12;
+                  if (y < edgeZone || y > rect.height - edgeZone) {
+                    e.currentTarget.style.cursor = 'ns-resize';
+                  } else {
+                    e.currentTarget.style.cursor = 'grab';
+                  }
+                }}
+                onMouseDown={(e) => {
+                  const rect = e.currentTarget.getBoundingClientRect();
+                  const clickY = e.clientY - rect.top;
+                  const napHeight = rect.height;
+                  const edgeZone = 12;
 
-                {/* Nap content (draggable middle area) */}
-                <div
-                  className="absolute top-4 bottom-4 left-0 right-0 flex items-center justify-center cursor-grab active:cursor-grabbing"
-                  onMouseDown={(e) => {
-                    const rect = e.currentTarget.getBoundingClientRect();
-                    const clickY = e.clientY - rect.top;
-                    const napHeight = rect.height;
+                  if (clickY < edgeZone) {
+                    setDragging({ type: "napStart", index });
+                  } else if (clickY > napHeight - edgeZone) {
+                    setDragging({ type: "napEnd", index });
+                  } else {
                     const offsetRatio = clickY / napHeight;
                     const offsetMinutes = Math.round(offsetRatio * duration);
                     setDragging({ type: "napMove", index, offset: offsetMinutes });
-                  }}
-                >
-                  <span className="text-indigo-600 font-semibold">Nap {index + 1} · {formatDuration(duration)}</span>
-                </div>
-
-                {/* Bottom drag handle */}
-                <div
-                  className="absolute bottom-0 left-0 right-0 h-4 bg-indigo-200 cursor-ns-resize flex items-center justify-end px-4"
-                  onMouseDown={() => setDragging({ type: "napEnd", index })}
-                >
-                  <span className="text-indigo-600 text-xs font-medium">{formatTime(nap.endMinutes)}</span>
-                </div>
+                  }
+                }}
+              >
+                <span className="text-indigo-700 text-sm">
+                  Nap {index + 1} ({formatTimeRange(nap.startMinutes, nap.endMinutes)}) · {formatDuration(duration)} {warning && <span className={warning === "short" ? "text-orange-500" : "text-red-500"}>⚠</span>}
+                </span>
               </div>
             );
           })}
@@ -348,9 +414,8 @@ export default function Home() {
               className="h-1 bg-yellow-300 cursor-ns-resize"
               onMouseDown={() => setDragging({ type: "bedtime" })}
             />
-            <div className="absolute top-full left-0 right-0 flex items-center justify-center gap-2 pt-1">
-              <span className="text-slate-300 font-medium text-sm">Bedtime</span>
-              <span className="text-slate-300 font-semibold text-sm">{formatTime(schedule.bedtime)}</span>
+            <div className="absolute top-full left-0 right-0 flex items-center justify-center pt-1">
+              <span className="text-slate-300 text-sm">Bedtime · {formatTime(schedule.bedtime)}</span>
             </div>
           </div>
         </div>
