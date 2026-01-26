@@ -266,6 +266,23 @@ export default function Home() {
       <header className="px-4 py-4 relative z-10">
         <h1 className="text-lg font-semibold text-slate-200 text-center">Sleep Schedule</h1>
 
+        {/* Explainer */}
+        <div className="mt-3 max-w-md mx-auto text-center text-sm text-slate-300">
+          <p>This calculator helps you plan your baby&apos;s sleep schedule based on their age and recommended awake windows.</p>
+          <p className="mt-2">Need personalized help with your baby&apos;s sleep?</p>
+          <a
+            href="https://example.com/book"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="inline-flex items-center gap-2 mt-2 px-4 py-2 bg-indigo-500 hover:bg-indigo-400 text-white rounded-lg text-sm font-medium transition-colors"
+          >
+            <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72 12.84 12.84 0 0 0 .7 2.81 2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45 12.84 12.84 0 0 0 2.81.7A2 2 0 0 1 22 16.92z"/>
+            </svg>
+            Book a free 30-minute discovery call
+          </a>
+        </div>
+
         {/* Controls */}
         <div className="flex gap-4 mt-3 max-w-md mx-auto">
           <div className="flex-1">
